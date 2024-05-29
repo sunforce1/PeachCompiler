@@ -51,7 +51,10 @@ int compile_file(const char* filename, const char* out_filename, int flags)
         return LEXICAL_ANALYSIS_INPUT_ERROR;
     }
 
+    process->token_vec = lex_process->token_vec;
+
     //perform parsing
+    
 
     //code generation
 

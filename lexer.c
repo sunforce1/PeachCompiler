@@ -14,6 +14,7 @@
     }
 
 static struct lex_process *lex_process;
+bool lex_is_in_expression();
 static struct token tmp_token;
 struct token *read_next_token();
 
@@ -25,6 +26,11 @@ static char peekc()
 static char nextc()
 {
     char c = lex_process->function->next_char(lex_process);
+
+    if (lex_is_in_expression()) {
+        buffer_write(lex_process->parentheses_buffer, c);
+    }
+
     lex_process->pos.col += 1;
 
     if (c == '\n')
@@ -51,6 +57,10 @@ static struct token *token_create(struct token *token)
 {
     memcpy(&tmp_token, token, sizeof(struct token));
     tmp_token.pos = lex_process->pos;
+
+    if (lex_is_in_expression()) {
+        tmp_token.between_brackets = buffer_ptr(lex_process->parentheses_buffer);
+    }
 
     return &tmp_token;
 }
@@ -88,9 +98,27 @@ unsigned long long read_number()
     return atoll(s);
 }
 
+int lexer_number_type(char c) {
+    
+    int a = NUMBER_TYPE_NORMAL;
+
+    if (c == 'L') {
+        a = NUMBER_TYPE_LONG;
+    } else if (c == 'F') {
+        a = NUMBER_TYPE_FLOAT;
+    }
+
+    return a;
+}
+
 struct token *token_make_number_for_value(unsigned long number)
 {
-    return token_create(&(struct token){.type = TOKEN_TYPE_NUMBER, .llnum = number});
+    int number_type = lexer_number_type(peekc());
+    
+    if (number_type != NUMBER_TYPE_NORMAL) {
+        nextc();
+    }
+    return token_create(&(struct token){.type = TOKEN_TYPE_NUMBER, .llnum = number, .num = number_type});
 }
 
 struct token *token_make_number()
@@ -459,6 +487,78 @@ static char get_escaped_char(char c) {
     return co;
 }
 
+const char *make_hexadecimal_number_str() {
+    struct buffer *buffer = buffer_create();
+    char c = peekc();
+
+    LEX_GET_C_IF(buffer, c, ((c >= '0' && c <= '9') || (c >= 'a' && 'f') || (c >= 'A' && c <= 'F')));
+
+    buffer_write(buffer, 0x00);
+    return buffer_ptr(buffer);
+}
+static struct token *token_make_hexadecimal_number() {
+    // skip the x
+
+    nextc();
+
+    unsigned long number = 0;
+    const char *hexadecimal_number = make_hexadecimal_number_str();
+    number = strtol(hexadecimal_number, 0, 16);
+
+    return token_make_number_for_value(number);
+}
+
+void validate_binary_number(const char* bin) {
+
+    size_t len = strlen(bin);
+
+    for (int i = 0; i < len; i++) {
+
+        if (bin[i] != '0' && bin[i] != '1') {
+            compiler_error(lex_process->compiler, "This is not a binary number");
+        }
+    }
+}
+
+static struct token *token_make_binary_number() {
+    // skip the b
+    nextc();
+    unsigned long number = 0;
+    const char *binary_number = read_number_str();
+
+    //validate binary number
+    validate_binary_number(binary_number);
+
+    number = strtol(binary_number, 0, 2);
+
+    return token_make_number_for_value(number);
+}
+
+static struct token *token_make_special_number() {
+
+    struct token *token = NULL;
+    struct token *last_token = vector_back_or_null(lex_process->token_vec);
+
+    if (!last_token || !(last_token->type == TOKEN_TYPE_NUMBER && last_token ->llnum == 0)) {
+        return token_make_identifier_or_keyword();
+    }
+
+    vector_pop(lex_process->token_vec);
+
+    char c = peekc();
+
+
+    // hexadecimal case
+    if (c == 'x') {
+        token = token_make_hexadecimal_number();
+    } else if (c == 'b') {
+        token = token_make_binary_number();
+    }
+
+    return token;
+
+}
+
 struct token* token_make_quotes() {
 
     assert_next_char('\'');
@@ -501,13 +601,22 @@ struct token *read_next_token()
         token = token_make_operator_or_string();
         break;
 
-        SYMBOL_CASE
+    SYMBOL_CASE
         token = token_make_symbol();
+        break;
+
+    case 'b':
+        token = token_make_special_number();
+        break;
+    case 'x':
+        token = token_make_special_number();
         break;
     // strings case
     case '"':
         token = token_make_string('"', '"');
         break;
+    
+    // quote case
     case '\'':
         token = token_make_quotes();
         break;
@@ -551,5 +660,51 @@ int lex(struct lex_process *process)
         vector_push(process->token_vec, token);
         token = read_next_token();
     }
+
+
     return LEXICAL_ANALYIS_ALL_OK;
+}
+char lexer_string_buffer_next(struct lex_process* process) {
+
+    struct buffer* buffe = lex_process_private(process);
+    return buffer_read(buffe);
+
+}
+char lexer_string_buffer_peak(struct lex_process* process) {
+
+    struct buffer* buffe = lex_process_private(process);
+    return buffer_peek(buffe);
+
+}
+void lexer_string_buffer_push(struct lex_process* process, char c) {
+
+    struct buffer* buffe = lex_process_private(process);
+    return buffer_write(buffe, c);
+
+}
+
+
+struct lex_process_functions lexer_str_buffer_funct =  {
+    .next_char = lexer_string_buffer_next,
+    .peek_char = lexer_string_buffer_peak,
+    .push_char = lexer_string_buffer_push
+};
+
+
+struct lex_process* tokens_build_tokens_from_string(struct compile_process* compiler, const char* str) {
+
+    struct buffer* buffer = buffer_create();
+    buffer_printf(buffer, str);
+
+    struct lex_process* lex_process= lex_process_create(compiler, &lexer_str_buffer_funct, buffer);
+
+    if (!lex_process) {
+        return NULL;
+    }
+
+    if (lex(lex_process) != LEXICAL_ANALYIS_ALL_OK) {
+        return NULL;
+    }
+
+    return lex_process;
 }

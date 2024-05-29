@@ -72,6 +72,12 @@ enum {
     TOKEN_TYPE_NEWLINE
 };
 
+enum {
+    NUMBER_TYPE_NORMAL,
+    NUMBER_TYPE_LONG,
+    NUMBER_TYPE_FLOAT,
+    NUMBER_TYPE_DOUBLE
+};
 
 struct token {
     int type;
@@ -86,6 +92,10 @@ struct token {
         unsigned long long llnum;
         void* any;
     };
+
+    struct token_number {
+    int type;
+    }num;
 
     // it is true if thre is whitespace between token and next token
     bool whitespace;
@@ -135,9 +145,50 @@ struct compile_process {
 
     } cfile;
 
+    struct vector* token_vec;
     FILE* ofile;
 
 
+};
+
+enum {
+    NODE_TYPE_EXPRESSION,
+    NODE_TYPE_EXPRESSION_PARANTHESIS,
+    NODE_TYPE_NUMBER,
+    NODE_TYPE_IDENTIFIER,
+    NODE_TYPE_STRING,
+    NODE_TYPE_VARIABLE,
+    NODE_TYPE_VARIABLE_LIST,
+    NODE_TYPE_FUNCTION,
+    NODE_TYPE_BODY,
+    NODE_TYPE_STATEMENT_RETURN,
+    NODE_TYPE_STATEMENT_IF,
+    NODE_TYPE_STATEMENT_ELSE,
+    NODE_TYPE_STATEMENT_WHILE,
+    NODE_TYPE_STATEMENT_DO_WHILE,
+    NODE_TYPE_STATEMENT_FOR,
+    NODE_TYPE_STATEMENT_BREAK,
+    NODE_TYPE_STATEMENT_CONTINUE,
+    NODE_TYPE_STATEMENT_SWITCH,
+    NODE_TYPE_STATEMENT_CASE,
+    NODE_TYPE_STATEMENT_DEFAULT,
+    NODE_TYPE_STATEMENT_GOTO,
+
+    NODE_TYPE_UNARY,
+    NODE_TYPE_TENARY,
+    NODE_TYPE_LABEL,
+    NODE_TYPE_STRUCT,
+    NODE_TYPE_UNION,
+    NODE_TYPE_BRACKET,
+    NODE_TYPE_CAST,
+    NODE_TYPE_BLANK
+};
+
+struct node {
+    int type;
+    int flags;
+
+    struct pos pos;
 };
 
 int compile_file(const char* filename, const char* out_filename, int flags);
@@ -154,5 +205,6 @@ void lex_process_free(struct lex_process* process);
 void* lex_process_private(struct lex_process* process);
 struct vector* lex_process_tokens(struct lex_process* process);
 int lex(struct lex_process* process);
+struct lex_process* tokens_build_tokens_from_string(struct compile_process* compiler, const char* str);
 bool token_is_keyword(struct token* token, const char* value);
 #endif 
