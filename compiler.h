@@ -145,10 +145,24 @@ struct compile_process {
 
     } cfile;
 
+    // token vector generated after lexical analysis
     struct vector* token_vec;
+
+    // node vector used in parsing
+    struct vector* node_vec;
+
+    // root of AST
+    struct vector* node_tree_vec;
+
+
     FILE* ofile;
 
 
+};
+
+enum {
+    PARSE_ALL_OK,
+    PARSE_GENERAL_ERROR
 };
 
 enum {
@@ -209,6 +223,7 @@ struct node {
     };
 };
 
+int parse(struct compile_process* process);
 int compile_file(const char* filename, const char* out_filename, int flags);
 struct compile_process* compile_process_create(const char* filename, const char* filename_out, int flags);
 char compile_process_next_char(struct lex_process* lex_process);
